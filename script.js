@@ -81,28 +81,56 @@ const init3D = () => {
   });
 };
 
-// --- APP LOGIC (Batch) ---
+// --- DATA: TEXT QUESTIONS (MCQ + TYPING) ---
+const textQuestions = [
+    // 5 MCQs
+    { id: 't1', type: 'mcq', category: 'Behavioral Logic', question: "A team member is constantly missing deadlines. What is your first action?", options: ["Report them to the manager immediately.", "Do their work for them to save the project.", "Talk to them privately to understand the root cause.", "Ignore it as long as it doesn't affect you."], correct: 2 },
+    { id: 't2', type: 'mcq', category: 'Critical Thinking', question: "You have two urgent tasks: one is 'Important but not Urgent', the other is 'Urgent but not Important'. Which do you prioritize?", options: ["Important but not Urgent", "Urgent but not Important", "Do both simultaneously", "Delegate the Important task"], correct: 0 },
+    { id: 't3', type: 'mcq', category: 'Scenario Logic', question: "A client requests a feature change 2 days before launch. What do you do?", options: ["Say yes immediately to please them.", "Reject it because it's too late.", "Assess the impact and propose a post-launch update.", "Work overtime without telling anyone."], correct: 2 },
+    { id: 't4', type: 'mcq', category: 'Ethics', question: "You find a major bug in production that no one else has noticed. What do you do?", options: ["Fix it silently without telling anyone.", "Document it and notify the team immediately.", "Ignore it if it doesn't break the main flow.", "Blame the person who wrote the code."], correct: 1 },
+    { id: 't5', type: 'mcq', category: 'Teamwork', question: "Your idea was rejected in a meeting. How do you react?", options: ["Argue until they agree.", "Accept the team's decision and support the chosen path.", "Stop contributing to the meeting.", "Complain to colleagues afterwards."], correct: 1 },
+    
+    // 5 Typing
+    { id: 't6', type: 'text', category: 'Scenario', question: "Describe a situation where you had to learn a new technology quickly. How did you approach it?" },
+    { id: 't7', type: 'text', category: 'Behavioral', question: "Tell us about a time you disagreed with a supervisor. How did you handle it?" },
+    { id: 't8', type: 'text', category: 'Critical Thinking', question: "If you were given a project with vague requirements, what steps would you take to clarify them?" },
+    { id: 't9', type: 'text', category: 'Problem Solving', question: "Explain a complex problem you solved recently in simple terms." },
+    { id: 't10', type: 'text', category: 'Values', question: "What motivates you more: working independently or in a team? Why?" }
+];
+
+// --- DATA: VOICE QUESTIONS (Expanded) ---
 const questions = [
   { id: 1, question: "Tell me about yourself.", category: "Behavioral", tip: "Keep it under 2 minutes. Start with your current role." },
   { id: 2, question: "Why do you want to work here?", category: "Motivation", tip: "Connect your skills to the company mission." },
   { id: 3, question: "Describe a challenge you faced.", category: "Behavioral", tip: "Use STAR: Situation, Task, Action, Result." },
   { id: 4, question: "What are your greatest strengths?", category: "Self-Awareness", tip: "Choose strengths relevant to the job." },
-  { id: 5, question: "Where do you see yourself in 5 years?", category: "Future Goals", tip: "Show ambition that aligns with the company." }
+  { id: 5, question: "Where do you see yourself in 5 years?", category: "Future Goals", tip: "Show ambition that aligns with the company." },
+  { id: 6, question: "How do you handle stress?", category: "Resilience", tip: "Give a concrete example of staying calm." },
+  { id: 7, question: "Tell me about a time you led a team.", category: "Leadership", tip: "Focus on how you supported others." },
+  { id: 8, question: "What is your biggest weakness?", category: "Self-Awareness", tip: "Mention a weakness and how you are improving it." },
+  { id: 9, question: "How do you prioritize tasks?", category: "Productivity", tip: "Mention tools or frameworks like Eisenhower Matrix." },
+  { id: 10, question: "Why should we hire you?", category: "Closing", tip: "Summarize your unique value proposition." }
 ];
 
-let currentIndex = 0;
-let answers = {};
+// Global State
+let currentTextIndex = 0;
+let currentVoiceIndex = 0;
+let textAnswers = {}; // Stores MCQ selection indices or Text strings
+let voiceAnswers = {};
 let isRecording = false;
 let recognition = null;
 let currentTranscript = "";
 let timerInt;
 let seconds = 0;
+let practicePhase = 'text'; // 'text' or 'voice'
 
 document.addEventListener('DOMContentLoaded', () => {
   init3D();
   initTheme();
-  updateUI();
   initSpeech();
+  
+  // Start Text Phase by default
+  updateTextUI();
   
   window.toggleMobileMenu = () => {
     document.getElementById('mobileMenu').classList.toggle('active');
@@ -122,6 +150,16 @@ function showPage(id) {
 
   document.getElementById('mobileMenu').classList.remove('active');
   window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Reset practice state if entering practice
+  if(id === 'practice') {
+     practicePhase = 'text';
+     currentTextIndex = 0;
+     currentVoiceIndex = 0;
+     document.getElementById('text-practice-container').style.display = 'block';
+     document.getElementById('voice-practice-container').style.display = 'none';
+     updateTextUI();
+  }
 }
 
 function toggleTheme() {
@@ -134,20 +172,94 @@ function initTheme() {
   document.documentElement.setAttribute('data-theme', saved);
 }
 
-/* PRACTICE LOGIC */
-function updateUI() {
-  const q = questions[currentIndex];
-  document.getElementById('currentQuestion').textContent = currentIndex + 1;
+/* ============================
+   PHASE 1: TEXT PRACTICE LOGIC
+   ============================ */
+function updateTextUI() {
+    const q = textQuestions[currentTextIndex];
+    document.getElementById('textCurrentQ').textContent = currentTextIndex + 1;
+    document.getElementById('textCategory').textContent = q.category;
+    document.getElementById('textQuestionDisplay').textContent = q.question;
+    document.getElementById('textProgressFill').style.width = `${((currentTextIndex + 1) / textQuestions.length) * 100}%`;
+    document.getElementById('textPrevBtn').disabled = currentTextIndex === 0;
+
+    const container = document.getElementById('textInputArea');
+    container.innerHTML = ''; // Clear previous
+
+    if(q.type === 'mcq') {
+        const optionsDiv = document.createElement('div');
+        optionsDiv.className = 'mcq-options fade-in';
+        q.options.forEach((opt, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'mcq-option-btn';
+            btn.textContent = opt;
+            // Check if previously selected
+            if(textAnswers[q.id] === idx) btn.classList.add('selected');
+            
+            btn.onclick = () => {
+                textAnswers[q.id] = idx; // Save Answer
+                // Visual update
+                document.querySelectorAll('.mcq-option-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+            };
+            optionsDiv.appendChild(btn);
+        });
+        container.appendChild(optionsDiv);
+    } else {
+        const textarea = document.createElement('textarea');
+        textarea.className = 'text-answer-input fade-in';
+        textarea.placeholder = "Type your answer here...";
+        textarea.value = textAnswers[q.id] || "";
+        textarea.oninput = (e) => { textAnswers[q.id] = e.target.value; };
+        container.appendChild(textarea);
+    }
+}
+
+function nextTextQuestion() {
+    // Validate current answer
+    const q = textQuestions[currentTextIndex];
+    if(textAnswers[q.id] === undefined || textAnswers[q.id] === "") {
+        showToast('Please answer before proceeding', 'error');
+        return;
+    }
+
+    if(currentTextIndex < textQuestions.length - 1) {
+        currentTextIndex++;
+        updateTextUI();
+    } else {
+        // Switch to Voice Phase
+        showToast("Text Section Complete! Moving to Voice.", "success");
+        document.getElementById('text-practice-container').style.display = 'none';
+        document.getElementById('voice-practice-container').style.display = 'block';
+        practicePhase = 'voice';
+        updateVoiceUI();
+    }
+}
+
+function prevTextQuestion() {
+    if(currentTextIndex > 0) {
+        currentTextIndex--;
+        updateTextUI();
+    }
+}
+
+
+/* ============================
+   PHASE 2: VOICE PRACTICE LOGIC
+   ============================ */
+function updateVoiceUI() {
+  const q = questions[currentVoiceIndex];
+  document.getElementById('currentQuestion').textContent = currentVoiceIndex + 1;
   document.getElementById('questionCategory').textContent = q.category;
   document.getElementById('questionText').textContent = q.question;
   document.getElementById('questionTip').textContent = `Tip: ${q.tip}`;
   
-  const pct = ((currentIndex + 1) / questions.length) * 100;
+  const pct = ((currentVoiceIndex + 1) / questions.length) * 100;
   document.getElementById('progressFill').style.width = `${pct}%`;
 
-  document.getElementById('prevBtn').disabled = currentIndex === 0;
+  document.getElementById('prevBtn').disabled = currentVoiceIndex === 0;
   
-  if (currentIndex === questions.length - 1) {
+  if (currentVoiceIndex === questions.length - 1) {
     document.getElementById('nextBtn').style.display = 'none';
     document.getElementById('finishBtn').style.display = 'block';
   } else {
@@ -155,23 +267,23 @@ function updateUI() {
     document.getElementById('finishBtn').style.display = 'none';
   }
 
-  currentTranscript = answers[q.id] || "";
+  currentTranscript = voiceAnswers[q.id] || "";
   document.getElementById('transcriptText').value = currentTranscript;
   resetRec();
 }
 
-function nextQuestion() { saveAnswer(); currentIndex++; updateUI(); }
-function prevQuestion() { saveAnswer(); currentIndex--; updateUI(); }
-function saveAnswer() { answers[questions[currentIndex].id] = currentTranscript; }
+function nextQuestion() { saveVoiceAnswer(); currentVoiceIndex++; updateVoiceUI(); }
+function prevQuestion() { saveVoiceAnswer(); currentVoiceIndex--; updateVoiceUI(); }
+function saveVoiceAnswer() { voiceAnswers[questions[currentVoiceIndex].id] = currentTranscript; }
 
 function finishSession() {
-  saveAnswer();
-  const count = Object.values(answers).filter(a => a.trim().length > 0).length;
+  saveVoiceAnswer();
+  const count = Object.values(voiceAnswers).filter(a => a.trim().length > 0).length;
   if (count === 0) {
     showToast('Please record at least one answer', 'error');
     return;
   }
-  showToast('Analyzing session...', 'success');
+  showToast('Analyzing full session...', 'success');
   setTimeout(() => { generateReport(); showPage('feedback'); }, 2000);
 }
 
@@ -209,7 +321,7 @@ function stopRec() {
   document.querySelector('.neural-core').classList.remove('recording');
   document.getElementById('recordStatus').textContent = "Tap Core to Record";
   
-  saveAnswer();
+  saveVoiceAnswer();
   if (currentTranscript.length > 0) showToast('Answer saved', 'success');
 }
 
@@ -241,28 +353,58 @@ function initSpeech() {
   }
 }
 
-/* REPORT GENERATION */
+/* REPORT GENERATION (UPDATED) */
 function generateReport() {
-  let totalWords = 0;
-  Object.values(answers).forEach(a => totalWords += a.split(' ').length);
-  
-  const score = Math.min(100, Math.max(40, totalWords / 3));
-  const scoreInt = Math.round(score);
-  
-  document.getElementById('overallScore').textContent = scoreInt;
-  document.querySelector('.circle').style.strokeDasharray = `${scoreInt}, 100`;
-  document.getElementById('feedbackSummary').textContent = scoreInt > 80 ? "Excellent! You are interview ready." : "Good start! Expand on your answers.";
-  
-  document.getElementById('barClarity').style.width = `${Math.min(100, scoreInt + 5)}%`;
-  document.getElementById('valClarity').textContent = `${Math.min(100, scoreInt + 5)}%`;
-  
-  document.getElementById('barRelevance').style.width = `${Math.min(100, scoreInt - 5)}%`;
-  document.getElementById('valRelevance').textContent = `${Math.min(100, scoreInt - 5)}%`;
-  
-  document.getElementById('barStructure').style.width = `${Math.min(100, scoreInt)}%`;
-  document.getElementById('valStructure').textContent = `${Math.min(100, scoreInt)}%`;
+  // 1. Calculate Voice Score
+  let totalVoiceWords = 0;
+  Object.values(voiceAnswers).forEach(a => totalVoiceWords += a.split(' ').length);
+  const voiceScore = Math.min(100, Math.max(40, totalVoiceWords / 5)); // Slightly stricter
 
-  const tips = ["Use the STAR method.", "Quantify your achievements.", "Speak confidently."];
+  // 2. Calculate Text Score (MCQ Accuracy + Text Length)
+  let mcqCorrect = 0;
+  let textLengthScore = 0;
+  
+  textQuestions.forEach(q => {
+      const ans = textAnswers[q.id];
+      if(q.type === 'mcq') {
+          if(ans === q.correct) mcqCorrect++;
+      } else {
+          // Simple length heuristic for text questions
+          if(ans && ans.length > 50) textLengthScore += 20; // 20 pts per decent answer (max 100)
+      }
+  });
+  
+  const mcqScore = (mcqCorrect / 5) * 100; // 5 MCQs
+  const textScore = Math.min(100, textLengthScore); // 5 Text qs
+  
+  // Weighted Average: 30% MCQ, 30% Text, 40% Voice
+  const finalScore = Math.round((mcqScore * 0.3) + (textScore * 0.3) + (voiceScore * 0.4));
+  
+  document.getElementById('overallScore').textContent = finalScore;
+  document.querySelector('.circle').style.strokeDasharray = `${finalScore}, 100`;
+  
+  let feedbackText = "Good effort. Keep practicing.";
+  if(finalScore > 85) feedbackText = "Outstanding! You are interview ready.";
+  else if(finalScore > 60) feedbackText = "Solid performance. Refine your answers.";
+  
+  document.getElementById('feedbackSummary').textContent = feedbackText;
+  
+  // Update Bars
+  document.getElementById('barClarity').style.width = `${Math.min(100, mcqScore)}%`; // Mapped to MCQ Logic
+  document.getElementById('valClarity').textContent = `${Math.round(mcqScore)}%`;
+  
+  document.getElementById('barRelevance').style.width = `${Math.min(100, textScore)}%`; // Mapped to Text Detail
+  document.getElementById('valRelevance').textContent = `${Math.round(textScore)}%`;
+  
+  document.getElementById('barStructure').style.width = `${Math.min(100, voiceScore)}%`; // Mapped to Voice Flow
+  document.getElementById('valStructure').textContent = `${Math.round(voiceScore)}%`;
+
+  const tips = [
+    "Review your MCQ logic answers.",
+    "Ensure written answers explain 'Why' and 'How'.",
+    "In voice answers, aim for a steady pace.",
+    "Use the STAR method for behavioral questions."
+  ];
   const list = document.getElementById('tipsList');
   list.innerHTML = "";
   tips.forEach(t => {

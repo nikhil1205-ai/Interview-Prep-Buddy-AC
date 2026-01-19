@@ -208,6 +208,23 @@ body {
 
 .nav-actions-row { display: flex; justify-content: space-between; }
 
+/* --- NEW: TEXT PRACTICE STYLES --- */
+.mcq-options { display: flex; flex-direction: column; gap: 10px; }
+.mcq-option-btn {
+  padding: 15px 20px; text-align: left; background: var(--bg-panel); border: 1px solid var(--border);
+  color: var(--text-main); border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.95rem;
+}
+.mcq-option-btn:hover { border-color: var(--primary); background: rgba(6, 182, 212, 0.05); }
+.mcq-option-btn.selected { background: var(--primary); color: #000; border-color: var(--primary); font-weight: 600; }
+[data-theme="light"] .mcq-option-btn.selected { color: #fff; }
+
+.text-answer-input {
+  width: 100%; min-height: 150px; background: transparent; border: none; color: var(--text-main);
+  font-family: var(--font-main); font-size: 1rem; resize: none; outline: none;
+}
+.fade-in { animation: fadeIn 0.5s ease forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
 /* 9. FEEDBACK */
 .score-card { background: var(--bg-panel); padding: 3rem; border-radius: var(--radius); border: 1px solid var(--border); text-align: center; margin-bottom: 2rem; }
 .chart-container { width: 150px; height: 150px; margin: 0 auto 1.5rem; position: relative; }
